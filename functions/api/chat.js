@@ -1,11 +1,13 @@
 export async function onRequestPost({ request, env }) {
-const headers = { "Content-Type": "application/json" };
+const headers = {
+"Content-Type": "application/json"
+};
 
 try {
 if (!env.GEMINI_API_KEY) {
 return new Response(
 JSON.stringify({
-error: "GEMINI_API_KEY missing. Check Cloudflare Secrets."
+error: "GEMINI_API_KEY is missing in Cloudflare settings."
 }),
 { status: 500, headers }
 );
@@ -14,32 +16,29 @@ error: "GEMINI_API_KEY missing. Check Cloudflare Secrets."
 const body = await request.json();
 const prompt = body.prompt;
 
-if (typeof prompt !== "string" || !prompt.trim()) {
+if (!prompt || typeof prompt !== "string") {
   return new Response(
-    JSON.stringify({ error: "Please enter a message." }),
+    JSON.stringify({
+      error: "Please enter a message."
+    }),
     { status: 400, headers }
   );
 }
 
 const response = await fetch(
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" +
+    encodeURIComponent(env.GEMINI_API_KEY),
   {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": env.GEMINI_API_KEY
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({
       contents: [
         {
-          role: "user",
-          parts: [{ text: prompt.trim() }]
+          parts: [{ text: prompt }]
         }
-      ],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1024
-      }
+      ]
     })
   }
 );
@@ -51,23 +50,14 @@ if (!response.ok) {
     JSON.stringify({
       error: data.error?.message || "Gemini API request failed."
     }),
-    { status: 502, headers }
+    { status: response.status, headers }
   );
 }
 
-const reply = data.candidates?.[0]?.content?.parts
-  ?.map(part => part.text || "")
-  .join("")
-  .trim();
-
-if (!reply) {
-  return new Response(
-    JSON.stringify({
-      error: "Gemini returned no text. Try another message."
-    }),
-    { status: 502, headers }
-  );
-}
+const reply =
+  data.candidates?.[0]?.content?.parts
+    ?.map(part => part.text || "")
+    .join("") || "I couldn't generate a reply.";
 
 return new Response(
   JSON.stringify({ reply }),
@@ -77,31 +67,9 @@ return new Response(
 } catch (error) {
 return new Response(
 JSON.stringify({
-error: "Backend error: " + (error.message || "Unknown error")
+error: "Server error: " + error.message
 }),
 { status: 500, headers }
 );
 }
-}
-
-export async function onRequestGet({ env }) {
-const headers = { "Content-Type": "application/json" };
-
-if (!env.GEMINI_API_KEY) {
-return new Response(
-JSON.stringify({
-status: "error",
-message: "GEMINI_API_KEY is missing in Cloudflare."
-}),
-{ status: 500, headers }
-);
-}
-
-return new Response(
-JSON.stringify({
-status: "ok",
-message: "KAINOVA backend is online. API key is configured."
-}),
-{ status: 200, headers }
-);
-        }
+    }
